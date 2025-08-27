@@ -1,6 +1,6 @@
-const CACHE='m-colony-v14';
+const CACHE='m-colony-v15';
 self.addEventListener('install', e=>{
-  e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./','./index.html?v=1.2.8','./manifest.json','./icons/icon-192.png','./icons/icon-512.png'])));
+  e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./','./index.html?v=1.2.9','./manifest.json','./icons/icon-192.png','./icons/icon-512.png'])));
 });
 self.addEventListener('activate', e=>{
   e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));

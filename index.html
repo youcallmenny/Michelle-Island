@@ -61,7 +61,7 @@
   <header>
     <h1>
       🌸 Michelle’s Colony
-      <span class="badge" id="badge">v1.2.8 IronTap</span>
+      <span class="badge" id="badge">v1.2.9 Tap-Force</span>
       <span class="badge" id="hlBadge" title="Total Heartlight">💞 <span id="hlHeader">0</span></span>
       <span class="badge" id="nickBadge" style="display:none"></span>
     </h1>
@@ -80,7 +80,7 @@
         <div class="stat"><h3>Heartlight 💞</h3><div class="val" id="inspirationStat">0</div><div class="small">permanent</div></div>
       </div>
       <div style="margin-top:10px" class="grid cols-2">
-        <button id="tapBtn" class="btn accent" tabindex="0" role="button" aria-label="Tap to Share Affection">Tap to Share Affection (+1 ✨)</button>
+        <button id="tapBtn" class="btn accent" tabindex="0" role="button" aria-label="Tap to Share Affection">Tap to Share Affection (<span id="tapPulse">0</span>)</button>
         <button id="hireBtn" class="btn good">Invite a Michelle (50 🍓)</button>
       </div>
       <div class="sep"></div>
@@ -165,7 +165,7 @@
 </div></div>
 
 <script>
-const VERSION = '1.2.8';
+const VERSION = '1.2.9';
 const SAVE_KEY = 'michelles_colony_save_v1';
 
 // --- Install bar (Android) ---
@@ -187,7 +187,7 @@ document.addEventListener('click', async (ev) => {
   }
 });
 
-// --- Game state & defaults (same as 1.2.7, omitted comments for brevity) ---
+// -------- Game state (same as previous) --------
 const defaultState = {
   tree: { levels: {} },
   resources: { energy: 0, ore: 0, food: 0, petals: 0 },
@@ -276,16 +276,12 @@ function prodText(p){ const parts=[]; if(p.energy) parts.push('+'+p.energy+'/s �
 function addLog(msg){ const t=new Date().toLocaleTimeString(); S.log.unshift('['+t+'] '+msg); S.log=S.log.slice(0,300); renderLog(); }
 function save(now=false){ S.lastTick=Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(S)); if(now){ document.getElementById('saveInfo').textContent='Saved at '+new Date().toLocaleTimeString(); } }
 
-// Auto-heal schema (same as 1.2.7)
+// Auto-heal schema
 function healSchema(){
   S.buildings = S.buildings || {};
   for(const [name,def] of Object.entries(defaultState.buildings)){
-    if(!S.buildings[name]){
-      S.buildings[name] = deepClone(def); S.buildings[name].count = 0; addLog('Auto-repaired building entry: '+name);
-    } else {
-      S.buildings[name] = Object.assign(deepClone(def), S.buildings[name]);
-      if(typeof S.buildings[name].count!=='number') S.buildings[name].count = 0;
-    }
+    if(!S.buildings[name]){ S.buildings[name] = deepClone(def); S.buildings[name].count = 0; addLog('Auto-repaired building entry: '+name); }
+    else { S.buildings[name] = Object.assign(deepClone(def), S.buildings[name]); if(typeof S.buildings[name].count!=='number') S.buildings[name].count = 0; }
   }
   S.upgrades = S.upgrades || {};
   for(const [uname, udef] of Object.entries(defaultState.upgrades)){
@@ -522,112 +518,35 @@ function renderTree(){
 function renderLog(){ document.getElementById('log').textContent = S.log.join('\\n'); }
 function renderAll(){ recompute(); renderStats(); renderBuilds(); renderUpgrades(); renderTree(); renderLog(); checkWinCondition(); }
 
-// -------- IronTap binding (more resilient on Android/PWAs) --------
+// -------- TAP-FORCE: No-debounce, multi-event, direct state update --------
 function bindTap(){
   const tapBtn = document.getElementById('tapBtn');
-  let cooldownUntil = 0;
+  const tapPulse = document.getElementById('tapPulse');
+  let pulses = 0;
 
-  function doTap(){
+  function doTap(e){
+    if(e && typeof e.preventDefault === 'function') e.preventDefault();
     if(S.won) return;
-    const now = performance.now();
-    if(now < cooldownUntil) return; // simple debounce
-    cooldownUntil = now + 80;
-
     const mult = totalMult();
     const gain = (1 + mult.tapAdd) * (mult.tapMult);
     S.resources.energy = Math.min(S.capacity.energy, S.resources.energy + gain);
-
-    try{ tapBtn.animate([{transform:'scale(1)'},{transform:'scale(0.97)'},{transform:'scale(1)'}],{duration:120}); }catch{}
+    pulses += 1;
+    tapPulse.textContent = pulses.toString();
     renderStats(); save();
+    return false;
   }
 
-  // Pointer API covers mouse + touch on modern Android
-  tapBtn.addEventListener('pointerdown', doTap, {passive:true});
-  // Fallbacks
-  tapBtn.addEventListener('click', doTap, {passive:true});
-  tapBtn.addEventListener('touchstart', doTap, {passive:true});
+  tapBtn.addEventListener('pointerdown', doTap, {passive:false});
+  tapBtn.addEventListener('touchstart', doTap, {passive:false});
+  tapBtn.addEventListener('mousedown', doTap, {passive:false});
+  tapBtn.addEventListener('click', doTap, {passive:false});
 
-  // Keyboard support
   tapBtn.addEventListener('keydown', (e)=>{
-    if(e.key==='Enter' || e.key===' '){ doTap(); }
+    if(e.key==='Enter' || e.key===' '){ doTap(e); }
   });
 }
 
-// ---- gameplay loop & boot ----
-let uiPulse = 0;
-let acc=0,last=performance.now();
-function loop(now){
-  const dt=(now-last)/1000; last=now; acc+=dt; const step=0.1;
-  while(acc>=step){ tick(step); acc-=step; }
-  renderStats();
-  uiPulse += dt;
-  if (uiPulse >= 0.5){
-    renderBuilds();
-    renderUpgrades();
-    maybeQuest();
-    maybeBubble();
-    uiPulse = 0;
-  }
-  requestAnimationFrame(loop);
-}
-
-// prestige + win (same as 1.2.7)
-function prestigeReq(){
-  const scale = Math.pow(1.25, (S.prestigeCount||0));
-  return { energy: Math.floor(10000 * scale), ore: Math.floor(5000 * scale), food: Math.floor(5000 * scale), petals: Math.floor(3000 * scale) };
-}
-function prestigeGain(){ const tE=treeEffects(); const total=S.resources.energy+S.resources.ore+S.resources.food+S.resources.petals; const base=Math.floor(Math.sqrt(total)/45); const mult=1+(tE.inspBonus||0); return Math.floor(base*mult); }
-function tryPrestige(){
-  if(S.won) return;
-  const req=prestigeReq();
-  if(!canAfford(req)){ addLog('Not enough resources to send the Love Beacon.'); return; }
-  const gain=prestigeGain(); pay(req);
-  const keepLevels = JSON.parse(JSON.stringify(S.tree.levels||{}));
-  const keptInsp = S.inspiration + gain;
-  const nextCount = (S.prestigeCount||0) + 1;
-  S = JSON.parse(JSON.stringify(defaultState));
-  healSchema();
-  S.tree.levels = keepLevels;
-  S.inspiration = keptInsp;
-  S.prestigeCount = nextCount;
-  scheduleNextQuest(true);
-  addLog('Love Beacon sent! +'+gain+' Heartlight (total '+S.inspiration+'). Requirements increased for next time.');
-  save(); renderAll();
-}
-function nodeCost(name){ const def = TREE_DEFS[name], lv = (S.tree.levels[name]||0); return Math.ceil(def.baseCost * Math.pow(def.scale, lv)); }
-function canBuyNode(name){ const def = TREE_DEFS[name], lv = (S.tree.levels[name]||0); if(lv>=def.max) return false; if(def.prereq && (S.tree.levels[def.prereq]||0)<=0) return false; return S.inspiration >= nodeCost(name); }
-function buyNode(name){
-  if(!canBuyNode(name)) return;
-  const cost = nodeCost(name);
-  S.inspiration -= cost;
-  S.tree.levels[name] = (S.tree.levels[name]||0) + 1;
-  addLog('Prestige node purchased: '+name+' (Lv '+S.tree.levels[name]+').');
-  recompute(); renderAll(); save();
-}
-function allTreeMaxed(){ for(const k in TREE_DEFS){ const d=TREE_DEFS[k]; const lv=(S.tree.levels[k]||0); if(lv<d.max) return false; } return true; }
-function buildEpilogue(){
-  const mic = S.colonists.count;
-  const insp = S.inspiration;
-  const runs = S.prestigeCount;
-  return "When every branch of the Bond Tree blossomed, the Michelle’s found their Gregory’s.\n\nThey carried home sparkles and charms, but the truest treasure was the way Gregory looked at Michelle—with the kind of love that glows in quiet rooms and busy mornings alike.\n\n"+
-         "Together they counted "+mic+" happy companions, held "+insp+" heartlights, and finished "+runs+" beacons—each one a promise kept.\n\nHere, on this gentle island, they lived softly and bravely, always finding their way back to one another. Happily ever after.";
-}
-function checkWinCondition(){
-  if(S.won) return;
-  if(allTreeMaxed()){
-    S.won = true;
-    const overlay = document.getElementById('ending');
-    const txt = document.getElementById('endingText');
-    txt.textContent = buildEpilogue();
-    const blob = new Blob([txt.textContent], {type:'text/plain'});
-    const url = URL.createObjectURL(blob);
-    const saver = document.getElementById('saveStoryBtn');
-    saver.href = url;
-    overlay.style.display='flex';
-    addLog('The Bond Tree is complete. A soft story fills the sky… 💞');
-    save();
-  }
-}
+// ---- quests, bubbles, prestige, win ----
 function randomBubblePos(el){
   const pad = 24;
   const w = Math.max(200, window.innerWidth*0.2);
@@ -692,7 +611,7 @@ function maybeQuest(){
     const ret = returns[Math.floor(Math.random()*returns.length)];
     addLog(ret + ' +' + fmt(e)+'✨ +' + fmt(o)+'💖 +' + fmt(f)+'🍓 +' + fmt(p)+'🌸');
     showBubble(ret);
-    S.questActive = false;
+    S.questActive = false
     scheduleNextQuest(true);
     save();
   }
@@ -716,11 +635,40 @@ function renderAll(){ recompute(); renderStats(); renderBuilds(); renderUpgrades
 
 function renderLog(){ document.getElementById('log').textContent = S.log.join('\\n'); }
 
+// Prestige & Win
 function prestigeReq(){
   const scale = Math.pow(1.25, (S.prestigeCount||0));
   return { energy: Math.floor(10000 * scale), ore: Math.floor(5000 * scale), food: Math.floor(5000 * scale), petals: Math.floor(3000 * scale) };
 }
-
+function prestigeGain(){ const tE=treeEffects(); const total=S.resources.energy+S.resources.ore+S.resources.food+S.resources.petals; const base=Math.floor(Math.sqrt(total)/45); const mult=1+(tE.inspBonus||0); return Math.floor(base*mult); }
+function tryPrestige(){
+  if(S.won) return;
+  const req=prestigeReq();
+  if(!canAfford(req)){ addLog('Not enough resources to send the Love Beacon.'); return; }
+  const gain=prestigeGain(); pay(req);
+  const keepLevels = JSON.parse(JSON.stringify(S.tree.levels||{}));
+  const keptInsp = S.inspiration + gain;
+  const nextCount = (S.prestigeCount||0) + 1;
+  S = JSON.parse(JSON.stringify(defaultState));
+  healSchema();
+  S.tree.levels = keepLevels;
+  S.inspiration = keptInsp;
+  S.prestigeCount = nextCount;
+  scheduleNextQuest(true);
+  addLog('Love Beacon sent! +'+gain+' Heartlight (total '+S.inspiration+'). Requirements increased for next time.');
+  save(); renderAll();
+}
+function nodeCost(name){ const def = TREE_DEFS[name], lv = (S.tree.levels[name]||0); return Math.ceil(def.baseCost * Math.pow(def.scale, lv)); }
+function canBuyNode(name){ const def = TREE_DEFS[name], lv = (S.tree.levels[name]||0); if(lv>=def.max) return false; if(def.prereq && (S.tree.levels[def.prereq]||0)<=0) return false; return S.inspiration >= nodeCost(name); }
+function buyNode(name){
+  if(!canBuyNode(name)) return;
+  const cost = nodeCost(name);
+  S.inspiration -= cost;
+  S.tree.levels[name] = (S.tree.levels[name]||0) + 1;
+  addLog('Prestige node purchased: '+name+' (Lv '+S.tree.levels[name]+').');
+  recompute(); renderAll(); save();
+}
+function allTreeMaxed(){ for(const k in TREE_DEFS){ const d=TREE_DEFS[k]; const lv=(S.tree.levels[k]||0); if(lv<d.max) return false; } return true; }
 function buildEpilogue(){
   const mic = S.colonists.count;
   const insp = S.inspiration;
@@ -745,31 +693,7 @@ function checkWinCondition(){
   }
 }
 
-let uiPulse = 0;
-let acc=0,last=performance.now();
-function loop(now){
-  const dt=(now-last)/1000; last=now; acc+=dt; const step=0.1;
-  while(acc>=step){ tick(step); acc-=step; }
-  renderStats();
-  uiPulse += dt;
-  if (uiPulse >= 0.5){
-    renderBuilds();
-    renderUpgrades();
-    maybeQuest();
-    maybeBubble();
-    uiPulse = 0;
-  }
-  requestAnimationFrame(loop);
-}
-
-function load(){ const raw=localStorage.getItem(SAVE_KEY); if(raw){ try{ S=JSON.parse(raw);}catch(e){ S=deepClone(defaultState);} } else { S=deepClone(defaultState); } S = Object.assign(deepClone(defaultState), S); healSchema(); }
-function doOffline(){ const now=Date.now(); const diff=Math.max(0,(now-S.lastTick)/1000); if(diff>3){ recompute(); const gainE=S.rates.eps*diff, gainO=S.rates.ops*diff, gainF=S.rates.fps*diff, gainP=S.rates.pps*diff; tick(diff); S.offlineNote='Welcome back! You were away for '+Math.floor(diff)+'s and earned +'+fmt(gainE)+'✨, +'+fmt(gainO)+'💖, +'+fmt(gainF)+'🍓, +'+fmt(gainP)+'🌸'; addLog(S.offlineNote); } }
-function buildInitial(){
-  load(); doOffline(); renderAll(); bindUI(); scheduleNextQuest(true); save();
-  if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js'); }
-  addLog('Welcome to Michelle’s Colony — v'+VERSION+' loaded.');
-  showInstallBar();
-}
+// Boot
 function bindUI(){
   document.getElementById('tabBuild').onclick = ()=>switchPanel('panelBuild');
   document.getElementById('tabUpg').onclick = ()=>switchPanel('panelUpg');
@@ -793,7 +717,30 @@ function bindUI(){
   document.getElementById('restartBtn').onclick = ()=>{ if(confirm('Start a brand new journey?')){ reset(); document.getElementById('ending').style.display='none'; } };
   bindTap();
 }
-window.addEventListener('load', ()=>{ buildInitial(); requestAnimationFrame(loop); });
+function loadAndStart(){
+  load(); doOffline(); renderAll(); bindUI(); scheduleNextQuest(true); save();
+  if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js'); }
+  addLog('Welcome to Michelle’s Colony — v'+VERSION+' loaded.');
+  showInstallBar();
+  requestAnimationFrame(loop);
+}
+let uiPulse = 0;
+let acc=0,last=performance.now();
+function loop(now){
+  const dt=(now-last)/1000; last=now; acc+=dt; const step=0.1;
+  while(acc>=step){ tick(step); acc-=step; }
+  renderStats();
+  uiPulse += dt;
+  if (uiPulse >= 0.5){
+    renderBuilds();
+    renderUpgrades();
+    maybeQuest();
+    maybeBubble();
+    uiPulse = 0;
+  }
+  requestAnimationFrame(loop);
+}
+window.addEventListener('load', loadAndStart);
 </script>
 </body>
 </html>
