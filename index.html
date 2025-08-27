@@ -109,6 +109,7 @@
         <div class="grid">
           <button class="btn" id="saveBtn">Save Now</button>
           <button class="btn bad" id="wipeBtn">Wipe Save (reset)</button>
+          <button class="btn" id="installBtn" style="display:none">Install Michelle’s Colony</button>
           <div class="small" id="saveInfo"></div>
         </div>
       </div>
@@ -127,8 +128,34 @@
 </div>
 
 <script>
-const VERSION = '1.1.0';
+const VERSION = '1.1.1';
 const SAVE_KEY = 'michelles_colony_save_v1';
+
+// --- Android Install Button Logic ---
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const btn = document.getElementById('installBtn');
+  if (btn) btn.style.display = 'block';
+});
+document.addEventListener('click', async (ev) => {
+  if (ev.target && ev.target.id === 'installBtn' && deferredPrompt) {
+    ev.target.disabled = true;
+    try {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+    } finally {
+      deferredPrompt = null;
+      ev.target.style.display = 'none';
+      ev.target.disabled = false;
+    }
+  }
+});
+window.addEventListener('appinstalled', () => {
+  const btn = document.getElementById('installBtn');
+  if (btn) btn.style.display = 'none';
+});
 
 const defaultState = {
   tree: { levels: {} },
@@ -137,11 +164,11 @@ const defaultState = {
   rates: { eps: 0, ops: 0, fps: 0 },
   buildings: {
     'Sun-Window Nook': { count: 0, baseCost: { ore: 10 }, costScale: 1.15, prod: { energy: 1 } },
-    'Charm Garden':    { count: 0, baseCost: { energy: 30 }, costScale: 1.17, prod: { ore: 0.6 } },
+    'Charm Garden':    { count: 0, baseCost: { energy: 30 }, costScale: 1.17, prod: { ore: 1.2 } },
     'Treat Kitchen':   { count: 0, baseCost: { ore: 20 }, costScale: 1.16, prod: { food: 0.6 } },
-    'Sparkle Jar':     { count: 0, baseCost: { ore: 40 }, costScale: 1.22, prod: { capEnergy: 50 } },
-    'Snuggle Hall':    { count: 0, baseCost: { ore: 50 }, costScale: 1.22, prod: { capOre: 50 } },
-    'Pantry':          { count: 0, baseCost: { ore: 50 }, costScale: 1.22, prod: { capFood: 50 } }
+    'Sparkle Jar':     { count: 0, baseCost: { ore: 40 }, costScale: 1.22, prod: { capEnergy: 150 } },
+    'Snuggle Hall':    { count: 0, baseCost: { ore: 50 }, costScale: 1.22, prod: { capOre: 150 } },
+    'Pantry':          { count: 0, baseCost: { ore: 50 }, costScale: 1.22, prod: { capFood: 150 } }
   },
   upgrades: {
     'Morning Coffee Ritual': { level:0, max:5, baseCost:{ ore:50 }, scale:1.8, effect:{ energyMult: 0.25 } },
@@ -223,7 +250,15 @@ function fmt(n){ if(n>=1e9) return (n/1e9).toFixed(2)+'B'; if(n>=1e6) return (n/
 function costFor(base, scale, count){
   const tE = treeEffects();
   const mult = Math.pow(scale, count);
-  const c = {}; for(const k in base){ c[k] = Math.ceil(base[k] * mult * (1 - (tE.discount||0))); } return c;
+  const c = {};
+  for(const k in base){
+    c[k] = Math.ceil(base[k] * mult * (1 - (tE.discount||0)));
+    if(S && S.capacity && S.capacity[k]){
+      const cap80 = Math.floor(S.capacity[k] * 0.8);
+      if(c[k] > cap80) c[k] = cap80;
+    }
+  }
+  return c;
 }
 function canAfford(cost){ for(const k in cost){ if((S.resources[k]||0)<cost[k]) return false; } return true; }
 function pay(cost){ for(const k in cost){ S.resources[k] = Math.max(0, (S.resources[k]||0)-cost[k]); } }
@@ -256,12 +291,14 @@ function recompute(){
     if(b.prod.energy) eps += b.prod.energy*c*mult.energyMult;
     if(b.prod.ore)    ops += b.prod.ore*c*mult.oreMult;
     if(b.prod.food)   fps += b.prod.food*c*mult.foodMult;
-    if(b.prod.capEnergy) capE += b.prod.capEnergy*c*mult.capMult;
-    if(b.prod.capOre)    capO += b.prod.capOre*c*mult.capMult;
-    if(b.prod.capFood)   capF += b.prod.capFood*c*mult.capMult;
+    if(b.prod.capEnergy){ const scale=1+0.15*Math.max(0,c-1); capE += b.prod.capEnergy*c*scale*mult.capMult; }
+    if(b.prod.capOre){ const scale=1+0.15*Math.max(0,c-1); capO += b.prod.capOre*c*scale*mult.capMult; }
+    if(b.prod.capFood){ const scale=1+0.15*Math.max(0,c-1); capF += b.prod.capFood*c*scale*mult.capMult; }
   }
   const colBoost = S.colonists.count * 0.05;
-  eps += colBoost * mult.energyMult; ops += colBoost * mult.oreMult; fps += colBoost * mult.foodMult;
+  eps += colBoost * mult.energyMult;
+  ops += colBoost * 1.2 * mult.oreMult; // more 💖 from Michelle’s
+  fps += colBoost * mult.foodMult;
   const foodPct = S.resources.food / Math.max(1, capF);
   const moraleFloor = Math.min(0.9, 0.2 + (tE.moraleFloorBonus||0));
   const moraleTarget = Math.min(1, Math.max(moraleFloor, foodPct*1.2));
@@ -314,7 +351,14 @@ function renderUpgrades(){
   const list=document.getElementById('upgradeList'); list.innerHTML='';
   for(const [name,u] of Object.entries(S.upgrades)){
     const lv=u.level, tE=treeEffects();
-    const nextCost=Object.fromEntries(Object.entries(u.baseCost).map(([k,v])=>[k,Math.ceil(v*Math.pow(u.scale,lv)*(1-(tE.discount||0)))]));
+    const nextCost=Object.fromEntries(Object.entries(u.baseCost).map(([k,v])=>{
+  let val = Math.ceil(v*Math.pow(u.scale,lv)*(1-(tE.discount||0)));
+  if(S && S.capacity && S.capacity[k]){
+    const cap80 = Math.floor(S.capacity[k]*0.8);
+    if(val>cap80) val = cap80;
+  }
+  return [k,val];
+}));
     const maxed=lv>=u.max;
     const el=document.createElement('div'); el.className='build-item';
     el.innerHTML='<div class="left"><div><div><b>'+name+'</b> <span class="count">Lv '+lv+'/'+u.max+'</span></div><div class="small">'+upgradeText(u.effect)+'</div><div class="small">Cost: '+Object.entries(nextCost).map(([k,v])=>fmt(v)+' '+icon(k)).join(' • ')+'</div></div></div><button class="btn '+(maxed?'':(canAfford(nextCost)?'good':''))+'" '+(maxed?'disabled':'')+'>Upgrade</button>';
