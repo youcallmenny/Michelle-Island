@@ -1,7 +1,9 @@
 {
+  "id": "/",
   "name": "Michelle\u2019s Colony",
   "short_name": "M-Colony",
-  "start_url": "./index.html?v=1.2.5h",
+  "start_url": "./index.html?v=1.2.6",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#201629",
   "theme_color": "#ff9fd0",

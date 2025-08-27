@@ -42,14 +42,27 @@
     #ending h2{margin-top:0}
     #ending .bigheart{font-size:44px}
     a{color:var(--accent);text-decoration:none}
+    /* Ensure long build lists never push items off-screen */
+    #panelBuild{max-height:60vh;overflow:auto}
   </style>
 </head>
 <body>
+<!-- Install bar -->
+<div id="installBar" style="position:fixed;left:10px;right:10px;bottom:10px;z-index:30;display:none">
+  <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);backdrop-filter:blur(6px);padding:10px;border-radius:12px">
+    <div>💗 Install <b>Michelle’s Colony</b> for app-mode</div>
+    <div style="display:flex;gap:8px">
+      <button id="installBtn" class="btn">Install App</button>
+      <button id="howBtn" class="btn">How?</button>
+    </div>
+  </div>
+</div>
+
 <div id="app">
   <header>
     <h1>
       🌸 Michelle’s Colony
-      <span class="badge" id="badge">v1.2.5 Hotfix</span>
+      <span class="badge" id="badge">v1.2.6 All Hotfixes</span>
       <span class="badge" id="hlBadge" title="Total Heartlight">💞 <span id="hlHeader">0</span></span>
       <span class="badge" id="nickBadge" style="display:none"></span>
     </h1>
@@ -124,7 +137,7 @@
         <div class="grid">
           <button class="btn" id="saveBtn">Save Now</button>
           <button class="btn bad" id="wipeBtn">Wipe Save (reset)</button>
-          <button class="btn" id="installBtn" style="display:none">Install Michelle’s Colony</button>
+          <button class="btn" id="installBtn2" style="display:none">Install Michelle’s Colony</button>
           <div class="small" id="saveInfo"></div>
         </div>
       </div>
@@ -153,14 +166,29 @@
 </div></div>
 
 <script>
-const VERSION = '1.2.5-hotfix';
+const VERSION = '1.2.6';
 const SAVE_KEY = 'michelles_colony_save_v1';
 
+// --- Install bar (Android) ---
 let deferredPrompt = null;
-window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; const btn = document.getElementById('installBtn'); if (btn) btn.style.display = 'block'; });
-document.addEventListener('click', async (ev) => { if (ev.target && ev.target.id === 'installBtn' && deferredPrompt) { ev.target.disabled = true; try { deferredPrompt.prompt(); await deferredPrompt.userChoice; } finally { deferredPrompt = null; ev.target.style.display = 'none'; ev.target.disabled = false; } } });
-window.addEventListener('appinstalled', () => { const btn = document.getElementById('installBtn'); if (btn) btn.style.display = 'none'; });
+function inPWA(){ return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone; }
+function showInstallBar(){ if(!inPWA()) document.getElementById('installBar').style.display='block'; }
+function hideInstallBar(){ document.getElementById('installBar').style.display='none'; }
 
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; showInstallBar(); const btn2=document.getElementById('installBtn2'); if(btn2) btn2.style.display='block'; });
+window.addEventListener('appinstalled', () => { hideInstallBar(); const btn2=document.getElementById('installBtn2'); if(btn2) btn2.style.display='none'; });
+
+document.addEventListener('click', async (ev) => {
+  if(ev.target && (ev.target.id==='installBtn' || ev.target.id==='installBtn2')){
+    if (deferredPrompt){ deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; hideInstallBar(); }
+    else { alert('On Android Chrome: menu (⋮) → "Install app" (or "Add to Home screen"). If missing, refresh once and try again.'); }
+  }
+  if(ev.target && ev.target.id==='howBtn'){
+    alert('Android Chrome → menu (⋮) → "Install app". If it does not show, refresh, visit twice, and make sure you are not in Incognito.');
+  }
+});
+
+// --- Game state ---
 const defaultState = {
   tree: { levels: {} },
   resources: { energy: 0, ore: 0, food: 0, petals: 0 },
@@ -211,6 +239,11 @@ const TREE_DEFS = {
   'Questing Spirit':    { max: 10, baseCost: 3, scale: 1.6, prereq: null, desc: 'Quests +5% reward & +3% faster per level' },
   'Tap Mastery':        { max: 10, baseCost: 3, scale: 1.6, prereq: 'Love Notes', desc: '+0.5 tap power per level' }
 };
+
+function totalTreeCostMax(){
+  let t=0; Object.keys(TREE_DEFS).forEach(k=>{ const d=TREE_DEFS[k]; for(let i=0;i<d.max;i++){ t += Math.ceil(d.baseCost*Math.pow(d.scale,i)); } });
+  return t;
+}
 
 function treeEffects(){
   const L = S.tree.levels || {};
@@ -371,7 +404,11 @@ function renderStats(){
 }
 function renderBuilds(){
   const list=document.getElementById('buildList'); list.innerHTML='';
-  for(const [name,b] of Object.entries(S.buildings)){
+  // Fixed order so nothing disappears on some devices
+  const order=['Sun-Window Nook','Charm Garden','Treat Kitchen','Flower Meadow','Sparkle Jar','Snuggle Hall','Pantry','Greenhouse'];
+  order.forEach(name=>{
+    const b=S.buildings[name];
+    if(!b) return;
     const nextCost = costFor(b.baseCost, b.costScale, b.count);
     const el = document.createElement('div'); el.className='build-item';
     el.innerHTML = '<div class="left"><div><div><b>'+name+'</b> <span class="count">x'+b.count+'</span></div><div class="small">Cost: '+Object.entries(nextCost).map(([k,v])=>fmt(v)+' '+icon(k)).join(' • ')+'</div><div class="small">'+prodText(b.prod)+'</div></div></div><button class="btn">Build</button>';
@@ -381,17 +418,10 @@ function renderBuilds(){
     btn.onclick=()=>{ const nc = costFor(b.baseCost, b.costScale, b.count); if(!canAfford(nc)) return; pay(nc); b.count+=1; if(name==='Snuggle Hall'){ S.colonists.housing+=2; } addLog('Built '+name+'.'); recompute(); renderStats(); refreshBtn(); save(); };
     el.dataset.refresh='1';
     list.appendChild(el);
-  }
+  });
 }
 function upgradeText(e){ const parts=[]; if(e.energyMult) parts.push('+'+Math.round(e.energyMult*100)+'% ✨'); if(e.oreMult) parts.push('+'+Math.round(e.oreMult*100)+'% 💖'); if(e.foodMult) parts.push('+'+Math.round(e.foodMult*100)+'% 🍓'); if(e.petalsMult) parts.push('+'+Math.round(e.petalsMult*100)+'% 🌸'); if(e.capAll) parts.push('+'+Math.round(e.capAll*100)+'% capacity'); if(e.tapMult) parts.push('+'+Math.round(e.tapMult*100)+'% tap'); if(e.moraleFloor) parts.push('+'+Math.round(e.moraleFloor*100)+'% happiness floor'); return parts.join(' • '); }
-function tier1Maxed(){
-  let ok=true;
-  for(const [name,u] of Object.entries(S.upgrades)){
-    if(name.includes('(T2)')) continue;
-    if(u.level < u.max){ ok=false; break; }
-  }
-  return ok;
-}
+function tier1Maxed(){ let ok=true; for(const [name,u] of Object.entries(S.upgrades)){ if(name.includes('(T2)')) continue; if(u.level < u.max){ ok=false; break; } } return ok; }
 function renderUpgrades(){
   const list=document.getElementById('upgradeList'); list.innerHTML='';
   const showT2 = tier1Maxed();
@@ -579,13 +609,7 @@ function buyNode(name){
   addLog('Prestige node purchased: '+name+' (Lv '+S.tree.levels[name]+').');
   recompute(); renderAll(); save();
 }
-function allTreeMaxed(){
-  for(const k in TREE_DEFS){
-    const d=TREE_DEFS[k]; const lv=(S.tree.levels[k]||0);
-    if(lv<d.max) return false;
-  }
-  return true;
-}
+function allTreeMaxed(){ for(const k in TREE_DEFS){ const d=TREE_DEFS[k]; const lv=(S.tree.levels[k]||0); if(lv<d.max) return false; } return true; }
 function buildEpilogue(){
   const mic = S.colonists.count;
   const insp = S.inspiration;
@@ -638,7 +662,8 @@ function bindUI(){
   document.getElementById('restartBtn').onclick = ()=>{ if(confirm('Start a brand new journey?')){ reset(); document.getElementById('ending').style.display='none'; } };
   bindTap();
 }
-function renderLog(){ document.getElementById('log').textContent = S.log.join('\n'); }
+let S;
+function renderLog(){ document.getElementById('log').textContent = S.log.join('\\n'); }
 function renderAll(){ recompute(); renderStats(); renderBuilds(); renderUpgrades(); renderTree(); renderLog(); checkWinCondition(); }
 let uiPulse = 0;
 let acc=0,last=performance.now();
@@ -660,6 +685,7 @@ function renderInitial(){
   load(); doOffline(); renderAll(); bindUI(); scheduleNextQuest(true); save();
   if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js'); }
   addLog('Welcome to Michelle’s Colony — v'+VERSION+' loaded.');
+  showInstallBar();
 }
 window.addEventListener('load', ()=>{ renderInitial(); requestAnimationFrame(loop); });
 </script>
