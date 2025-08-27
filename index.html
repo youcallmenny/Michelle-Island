@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+  <title>Michelle’s Colony</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ff9fd0"/>
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <style>
+    :root{
+      --bg:#201629; --panel:#2a1e36; --muted:#c6b9d4; --text:#fff7fb;
+      --accent:#ff9fd0; --warn:#ffd18a; --good:#b4f0c2; --bad:#ff8aa5;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#201629,#1b1323);color:var(--text);font-family:system-ui,-apple-system,Inter,Segoe UI,Roboto,Arial,sans-serif}
+    #app{display:grid;grid-template-rows:auto 1fr auto;min-height:100%}
+    header,footer{padding:10px 12px;background:rgba(255,255,255,0.03);backdrop-filter:blur(6px);position:sticky;z-index:2}
+    header{top:0} footer{bottom:0}
+    h1{font-size:18px;margin:0;display:flex;align-items:center;gap:10px}
+    .badge{font-size:12px;color:var(--bg);background:var(--accent);border-radius:999px;padding:2px 8px;}
+    .avatar{width:28px;height:28px;border-radius:50%;vertical-align:middle;box-shadow:0 2px 6px rgba(0,0,0,.3);}
+    .content{padding:10px;display:grid;gap:10px;grid-template-columns:1fr;max-width:980px;margin:0 auto;width:100%}
+    @media(min-width:800px){.content{grid-template-columns:1.2fr 1fr}}
+    .card{background:var(--panel);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:12px;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .stat{flex:1 1 110px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:8px 10px}
+    .stat h3{margin:0 0 6px 0;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+    .stat .val{font-variant-numeric:tabular-nums;font-size:18px}
+    .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:#3a2a4a;color:#fff;font-weight:600}
+    .btn:disabled{opacity:.5} .btn.accent{background:linear-gradient(180deg,#4b2f4b,#301b30)} .btn.warn{background:linear-gradient(180deg,#3a2a1a,#22170e)} .btn.good{background:linear-gradient(180deg,#1a3a1f,#0d2312)}
+    .grid{display:grid;gap:8px} .grid.cols-2{grid-template-columns:1fr 1fr} .grid.cols-3{grid-template-columns:1fr 1fr 1fr}
+    .label{font-size:12px;color:var(--muted)} .small{font-size:12px;color:var(--muted)} .sep{height:1px;background:rgba(255,255,255,0.06);margin:10px 0}
+    .build-item{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:8px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;background:rgba(255,255,255,0.03)}
+    .count{font-size:12px;color:var(--muted)} .progress{height:6px;background:#24182e;border-radius:999px;overflow:hidden;border:1px solid rgba(255,255,255,0.06)}
+    .progress>div{height:100%;background:linear-gradient(90deg,var(--accent),#ffd1ec)}
+    .tabs{display:flex;gap:6px;margin-bottom:8px} .tab{flex:1;padding:10px;text-align:center;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);font-weight:600}
+    .tab.active{background:linear-gradient(180deg,#3a2b4a,#2a1e36)}
+    a{color:var(--accent);text-decoration:none}
+  </style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>🌸 Michelle’s Colony <img src="icons/chibi_michelle_64.png" class="avatar" alt="Michelle chibi"/> <span class="badge" id="badge">v1.1 (Michelle Edition)</span></h1>
+  </header>
+
+  <main class="content">
+    <section class="card">
+      <div class="row">
+        <div class="stat"><h3>Sparkles ✨</h3><div class="val" id="energy">0</div><div class="small" id="eps">+0/s</div></div>
+        <div class="stat"><h3>Charms 💖</h3><div class="val" id="ore">0</div><div class="small" id="ops">+0/s</div></div>
+        <div class="stat"><h3>Treats 🍓</h3><div class="val" id="food">0</div><div class="small" id="fps">+0/s</div></div>
+        <div class="stat"><h3>Michelle’s 🐾 <img src="icons/chibi_michelle_64.png" style="width:18px;height:18px;border-radius:50%;vertical-align:-3px"></h3><div class="val" id="colonists">0 / 0</div><div class="small" id="morale">happiness: 100%</div></div>
+      </div>
+      <div style="margin-top:10px" class="grid cols-2">
+        <button id="tapBtn" class="btn accent">Tap to Share Affection (+1 ✨)</button>
+        <button id="hireBtn" class="btn good">Invite a Michelle (50 🍓)</button>
+      </div>
+      <div class="sep"></div>
+      <div class="grid cols-3">
+        <div><div class="label">Sparkle Jars</div><div class="progress"><div id="batteryFill" style="width:0%"></div></div><div class="small" id="capText">0 / 100</div></div>
+        <div><div class="label">Charm Shelf</div><div class="progress"><div id="storeFill" style="width:0%"></div></div><div class="small" id="storeText">0 / 100</div></div>
+        <div><div class="label">Treat Pantry</div><div class="progress"><div id="siloFill" style="width:0%"></div></div><div class="small" id="siloText">0 / 100</div></div>
+      </div>
+      <div class="small" style="margin-top:10px">Tip: Build cozy spots and treat kitchens. Keep Treats up to keep happiness high. Your Michelle’s keep glowing even while you’re away.</div>
+    </section>
+
+    <section class="card">
+      <div class="tabs">
+        <button class="tab active" id="tabBuild">Build</button>
+        <button class="tab" id="tabUpg">Upgrades</button>
+        <button class="tab" id="tabPrestige">Heartlight</button>
+        <button class="tab" id="tabTree">Bond Tree</button>
+        <button class="tab" id="tabSettings">Settings</button>
+      </div>
+
+      <div id="panelBuild">
+        <div class="grid" id="buildList"></div>
+      </div>
+
+      <div id="panelUpg" style="display:none">
+        <div class="grid" id="upgradeList"></div>
+      </div>
+
+      <div id="panelPrestige" style="display:none">
+        <div class="small">Send a Love Beacon to celebrate your bond, resetting the island but keeping permanent <b>Heartlight</b> that makes every Michelle glow brighter. Spend Heartlight in the <b>Bond Tree</b> for lasting bonuses.</div>
+        <div class="grid" style="margin-top:10px">
+          <div class="build-item">
+            <div class="left">
+              <div>
+                <div><b>Send Love Beacon</b> 🚀</div>
+                <div class="small">Needs 10k ✨, 5k 💖, 5k 🍓</div>
+                <div class="small">Grants <span id="prestigeGain">0</span> Heartlight</div>
+              </div>
+            </div>
+            <button id="prestigeBtn" class="btn warn">Celebrate (Reset)</button>
+          </div>
+          <div class="small">Total Heartlight: <b id="inspiration">0</b> (+<span id="inspBoost">0</span>% all glow)</div>
+        </div>
+      </div>
+
+      <div id="panelTree" style="display:none">
+        <div class="small">Spend <b>Heartlight</b> to unlock permanent bonuses. Nodes can be purchased multiple times up to their cap. Some nodes require others first.</div>
+        <div class="grid" id="treeList" style="margin-top:10px"></div>
+      </div>
+
+      <div id="panelSettings" style="display:none">
+        <div class="grid">
+          <button class="btn" id="saveBtn">Save Now</button>
+          <button class="btn bad" id="wipeBtn">Wipe Save (reset)</button>
+          <button class="btn" id="installBtn" style="display:none">Install Michelle’s Colony</button>
+          <div class="small" id="saveInfo"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div><b>Moments</b></div>
+        <button class="btn" id="exportBtn" style="max-width:200px">Export Save</button>
+      </div>
+      <div id="log" class="small" style="margin-top:8px;max-height:220px;overflow:auto;white-space:pre-wrap"></div>
+    </section>
+  </main>
+
+  <footer><div class="small">Made with 💗. Add to Home Screen for full-screen play • Offline ready</div></footer>
+</div>
+
+<script>
+const VERSION = '1.1.1';
+const SAVE_KEY = 'michelles_colony_save_v1';
+
+// --- Android Install Button Logic ---
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const btn = document.getElementById('installBtn');
+  if (btn) btn.style.display = 'block';
+});
+document.addEventListener('click', async (ev) => {
+  if (ev.target && ev.target.id === 'installBtn' && deferredPrompt) {
+    ev.target.disabled = true;
+    try {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+    } finally {
+      deferredPrompt = null;
+      ev.target.style.display = 'none';
+      ev.target.disabled = false;
+    }
+  }
+});
+window.addEventListener('appinstalled', () => {
+  const btn = document.getElementById('installBtn');
+  if (btn) btn.style.display = 'none';
+});
+
+const defaultState = {
+  tree: { levels: {} },
+  resources: { energy: 0, ore: 0, food: 0 },
+  capacity: { energy: 100, ore: 100, food: 100 },
+  rates: { eps: 0, ops: 0, fps: 0 },
+  buildings: {
+    'Sun-Window Nook': { count: 0, baseCost: { ore: 10 }, costScale: 1.15, prod: { energy: 1 } },
+    'Charm Garden':    { count: 0, baseCost: { energy: 30 }, costScale: 1.17, prod: { ore: 1.2 } },
+    'Treat Kitchen':   { count: 0, baseCost: { ore: 20 }, costScale: 1.16, prod: { food: 0.6 } },
+    'Sparkle Jar':     { count: 0, baseCost: { ore: 40 }, costScale: 1.22, prod: { capEnergy: 150 } },
+    'Snuggle Hall':    { count: 0, baseCost: { ore: 50 }, costScale: 1.22, prod: { capOre: 150 } },
+    'Pantry':          { count: 0, baseCost: { ore: 50 }, costScale: 1.22, prod: { capFood: 150 } }
+  },
+  upgrades: {
+    'Morning Coffee Ritual': { level:0, max:5, baseCost:{ ore:50 }, scale:1.8, effect:{ energyMult: 0.25 } },
+    'Adventure Spark':       { level:0, max:5, baseCost:{ energy:80 }, scale:1.8, effect:{ oreMult: 0.25 } },
+    'Favorite Snacks':       { level:0, max:5, baseCost:{ ore:60 }, scale:1.8, effect:{ foodMult: 0.25 } },
+    'Cozy Logistics':        { level:0, max:5, baseCost:{ ore:100 }, scale:2.0, effect:{ capAll: 0.30 } }
+  },
+  colonists: { count: 0, morale: 1.0, housing: 0 },
+  inspiration: 0,
+  lastTick: Date.now(),
+  offlineNote: '',
+  log: []
+};
+
+let S = null;
+
+// --- Bond Tree ---
+const TREE_DEFS = {
+  'Shared Laughs':   { max: 10, baseCost: 1, scale: 1.4, prereq: null, desc: '+10% ✨ Sparkles per level' },
+  'Adventures Together':  { max: 10, baseCost: 1, scale: 1.4, prereq: 'Shared Laughs', desc: '+10% 💖 Charms per level' },
+  'Favorite Snacks':    { max: 10, baseCost: 1, scale: 1.4, prereq: 'Adventures Together', desc: '+10% 🍓 Treats per level' },
+  'Cozy Storage': { max: 10, baseCost: 1, scale: 1.5, prereq: null, desc: '+10% capacity per level' },
+  'Love Notes':   { max: 10, baseCost: 2, scale: 1.5, prereq: 'Shared Laughs', desc: '+1 tap affection power per level' },
+  'Organized Nest': { max: 10, baseCost: 2, scale: 1.5, prereq: 'Cozy Storage', desc: '-2% build & upgrade costs per level (to 50%)' },
+  'Quiet Nights In':   { max: 8,  baseCost: 2, scale: 1.6, prereq: 'Favorite Snacks', desc: '+5% happiness floor per level' },
+  'Room for Cuddles': { max: 5, baseCost: 3, scale: 1.7, prereq: 'Organized Nest', desc: '+1 housing per Snuggle Hall per level' },
+  'Gentle Rhythm':       { max: 10, baseCost: 2, scale: 1.6, prereq: 'Love Notes', desc: '+0.5 ✨/s per level (auto glow)' },
+  'Beating Hearts':     { max: 10, baseCost: 3, scale: 1.7, prereq: null, desc: '+5% Heartlight gain per level' }
+};
+
+function treeEffects(){
+  const L = S.tree.levels || {};
+  return {
+    energyMult: 1 + 0.10*(L['Shared Laughs']||0),
+    oreMult:    1 + 0.10*(L['Adventures Together']||0),
+    foodMult:   1 + 0.10*(L['Favorite Snacks']||0),
+    capMult:    1 + 0.10*(L['Cozy Storage']||0),
+    tapBonus:        (L['Love Notes']||0)*1.0,
+    discount:        Math.min(0.5, 0.02*(L['Organized Nest']||0)),
+    moraleFloorBonus: 0.05*(L['Quiet Nights In']||0),
+    extraHousingPerWarehouse: (L['Room for Cuddles']||0),
+    autoEnergy:      0.5*(L['Gentle Rhythm']||0),
+    inspBonus:       0.05*(L['Beating Hearts']||0)
+  };
+}
+
+function nodeCost(name){
+  const def = TREE_DEFS[name], lv = (S.tree.levels[name]||0);
+  return Math.ceil(def.baseCost * Math.pow(def.scale, lv));
+}
+function canBuyNode(name){
+  const def = TREE_DEFS[name], lv = (S.tree.levels[name]||0);
+  if(lv>=def.max) return false;
+  if(def.prereq && (S.tree.levels[def.prereq]||0)<=0) return false;
+  return S.inspiration >= nodeCost(name);
+}
+function buyNode(name){
+  if(!canBuyNode(name)) return;
+  const cost = nodeCost(name);
+  S.inspiration -= cost;
+  S.tree.levels[name] = (S.tree.levels[name]||0) + 1;
+  addLog('Prestige node purchased: '+name+' (Lv '+S.tree.levels[name]+').');
+  recompute(); renderAll(); save();
+}
+function renderTree(){
+  const list = document.getElementById('treeList'); list.innerHTML='';
+  Object.keys(TREE_DEFS).forEach(name=>{
+    const def=TREE_DEFS[name], lv=(S.tree.levels[name]||0), maxed=(lv>=def.max), cost=nodeCost(name);
+    const prereq = def.prereq ? ('Requires: '+def.prereq) : 'No prerequisite';
+    const el = document.createElement('div'); el.className='build-item';
+    el.innerHTML = '<div class="left"><div><div><b>'+name+'</b> <span class="count">Lv '+lv+'/'+def.max+'</span></div><div class="small">'+def.desc+'</div><div class="small">'+prereq+'</div><div class="small">Cost: '+cost+' 💞 Heartlight</div></div></div><button class="btn '+((!maxed && S.inspiration>=cost)?'good':'')+'" '+(maxed?'disabled':'')+'>Buy</button>';
+    el.querySelector('button').onclick=()=>buyNode(name);
+    list.appendChild(el);
+  });
+}
+
+// --- Utils ---
+function fmt(n){ if(n>=1e9) return (n/1e9).toFixed(2)+'B'; if(n>=1e6) return (n/1e6).toFixed(2)+'M'; if(n>=1e3) return (n/1e3).toFixed(2)+'k'; return (Math.floor(n*100)/100).toLocaleString(); }
+function costFor(base, scale, count){
+  const tE = treeEffects();
+  const mult = Math.pow(scale, count);
+  const c = {};
+  for(const k in base){
+    c[k] = Math.ceil(base[k] * mult * (1 - (tE.discount||0)));
+    if(S && S.capacity && S.capacity[k]){
+      const cap80 = Math.floor(S.capacity[k] * 0.8);
+      if(c[k] > cap80) c[k] = cap80;
+    }
+  }
+  return c;
+}
+function canAfford(cost){ for(const k in cost){ if((S.resources[k]||0)<cost[k]) return false; } return true; }
+function pay(cost){ for(const k in cost){ S.resources[k] = Math.max(0, (S.resources[k]||0)-cost[k]); } }
+function addLog(msg){ const t=new Date().toLocaleTimeString(); S.log.unshift('['+t+'] '+msg); S.log=S.log.slice(0,200); renderLog(); }
+function save(now=false){ S.lastTick=Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(S)); if(now){ document.getElementById('saveInfo').textContent='Saved at '+new Date().toLocaleTimeString(); } }
+function load(){ const raw=localStorage.getItem(SAVE_KEY); if(raw){ try{ S=JSON.parse(raw);}catch{S=structuredClone(defaultState);} }else{ S=structuredClone(defaultState);} S=Object.assign(structuredClone(defaultState), S); }
+function reset(){ localStorage.removeItem(SAVE_KEY); S=structuredClone(defaultState); addLog('New run started.'); save(); renderAll(); }
+
+function totalMult(){
+  const tE = treeEffects();
+  const insp = 1 + (S.inspiration * 0.02);
+  let energyMult=1, oreMult=1, foodMult=1, capMult=1;
+  for(const [name,u] of Object.entries(S.upgrades)){
+    const lv=u.level;
+    if(name==='Morning Coffee Ritual') energyMult += lv*u.effect.energyMult;
+    if(name==='Adventure Spark')       oreMult    += lv*u.effect.oreMult;
+    if(name==='Favorite Snacks')       foodMult   += lv*u.effect.foodMult;
+    if(name==='Cozy Logistics')        capMult    += lv*u.effect.capAll;
+  }
+  return { energyMult: energyMult*insp*tE.energyMult, oreMult: oreMult*insp*tE.oreMult, foodMult: foodMult*insp*tE.foodMult, capMult: capMult*tE.capMult, tE };
+}
+
+function recompute(){
+  const tE = treeEffects();
+  const mult = totalMult();
+  let eps=0, ops=0, fps=0;
+  let capE=100, capO=100, capF=100;
+  for(const [name,b] of Object.entries(S.buildings)){
+    const c=b.count; if(c<=0) continue;
+    if(b.prod.energy) eps += b.prod.energy*c*mult.energyMult;
+    if(b.prod.ore)    ops += b.prod.ore*c*mult.oreMult;
+    if(b.prod.food)   fps += b.prod.food*c*mult.foodMult;
+    if(b.prod.capEnergy){ const scale=1+0.15*Math.max(0,c-1); capE += b.prod.capEnergy*c*scale*mult.capMult; }
+    if(b.prod.capOre){ const scale=1+0.15*Math.max(0,c-1); capO += b.prod.capOre*c*scale*mult.capMult; }
+    if(b.prod.capFood){ const scale=1+0.15*Math.max(0,c-1); capF += b.prod.capFood*c*scale*mult.capMult; }
+  }
+  const colBoost = S.colonists.count * 0.05;
+  eps += colBoost * mult.energyMult;
+  ops += colBoost * 1.2 * mult.oreMult; // more 💖 from Michelle’s
+  fps += colBoost * mult.foodMult;
+  const foodPct = S.resources.food / Math.max(1, capF);
+  const moraleFloor = Math.min(0.9, 0.2 + (tE.moraleFloorBonus||0));
+  const moraleTarget = Math.min(1, Math.max(moraleFloor, foodPct*1.2));
+  S.colonists.morale = S.colonists.morale*0.9 + moraleTarget*0.1;
+  const moraleMult = 0.5 + S.colonists.morale*0.5;
+  eps *= moraleMult; ops *= moraleMult; fps *= moraleMult;
+  S.rates.eps = eps + (tE.autoEnergy||0); S.rates.ops = ops; S.rates.fps = fps;
+  S.capacity.energy=Math.floor(capE); S.capacity.ore=Math.floor(capO); S.capacity.food=Math.floor(capF);
+  const halls = (S.buildings['Snuggle Hall']?.count)||0; const per = 2 + (tE.extraHousingPerWarehouse||0); S.colonists.housing = halls * per;
+}
+
+function tick(dt){ S.resources.energy = Math.min(S.capacity.energy, S.resources.energy + S.rates.eps*dt); S.resources.ore = Math.min(S.capacity.ore, S.resources.ore + S.rates.ops*dt); S.resources.food = Math.min(S.capacity.food, S.resources.food + S.rates.fps*dt); }
+
+function doOffline(){ const now=Date.now(); const diff=Math.max(0,(now-S.lastTick)/1000); if(diff>3){ recompute(); const gainE=S.rates.eps*diff, gainO=S.rates.ops*diff, gainF=S.rates.fps*diff; tick(diff); S.offlineNote='Welcome back! You were away for '+Math.floor(diff)+'s and earned +'+fmt(gainE)+'✨, +'+fmt(gainO)+'💖, +'+fmt(gainF)+'🍓'; addLog(S.offlineNote);} }
+
+function icon(k){ return k==='energy'?'✨':k==='ore'?'💖':k==='food'?'🍓':k; }
+function prodText(p){ const parts=[]; if(p.energy) parts.push('+'+p.energy+'/s ✨'); if(p.ore) parts.push('+'+p.ore+'/s 💖'); if(p.food) parts.push('+'+p.food+'/s 🍓'); if(p.capEnergy) parts.push('+'+p.capEnergy+' cap ✨'); if(p.capOre) parts.push('+'+p.capOre+' cap 💖'); if(p.capFood) parts.push('+'+p.capFood+' cap 🍓'); return parts.join(' • '); }
+
+function renderStats(){
+  document.getElementById('energy').textContent = fmt(S.resources.energy);
+  document.getElementById('ore').textContent = fmt(S.resources.ore);
+  document.getElementById('food').textContent = fmt(S.resources.food);
+  document.getElementById('eps').textContent = '+'+fmt(S.rates.eps)+'/s';
+  document.getElementById('ops').textContent = '+'+fmt(S.rates.ops)+'/s';
+  document.getElementById('fps').textContent = '+'+fmt(S.rates.fps)+'/s';
+  document.getElementById('colonists').textContent = S.colonists.count + ' / ' + S.colonists.housing;
+  document.getElementById('morale').textContent = 'happiness: ' + (S.colonists.morale*100).toFixed(0) + '%';
+  const ePct=(S.resources.energy/S.capacity.energy)*100, oPct=(S.resources.ore/S.capacity.ore)*100, fPct=(S.resources.food/S.capacity.food)*100;
+  document.getElementById('batteryFill').style.width=Math.min(100,ePct)+'%';
+  document.getElementById('storeFill').style.width=Math.min(100,oPct)+'%';
+  document.getElementById('siloFill').style.width=Math.min(100,fPct)+'%';
+  document.getElementById('capText').textContent = fmt(S.resources.energy)+' / '+fmt(S.capacity.energy);
+  document.getElementById('storeText').textContent = fmt(S.resources.ore)+' / '+fmt(S.capacity.ore);
+  document.getElementById('siloText').textContent = fmt(S.resources.food)+' / '+fmt(S.capacity.food);
+  const preview=prestigeGain(); document.getElementById('prestigeGain').textContent=fmt(preview);
+  document.getElementById('inspiration').textContent=fmt(S.inspiration);
+  document.getElementById('inspBoost').textContent=(S.inspiration*2).toFixed(0);
+}
+function renderBuilds(){
+  const list=document.getElementById('buildList'); list.innerHTML='';
+  for(const [name,b] of Object.entries(S.buildings)){
+    const nextCost = costFor(b.baseCost, b.costScale, b.count);
+    const el = document.createElement('div'); el.className='build-item';
+    el.innerHTML = '<div class="left"><div><div><b>'+name+'</b> <span class="count">x'+b.count+'</span></div><div class="small">Cost: '+Object.entries(nextCost).map(([k,v])=>fmt(v)+' '+icon(k)).join(' • ')+'</div><div class="small">'+prodText(b.prod)+'</div></div></div><button class="btn '+(canAfford(nextCost)?'good':'')+'">Build</button>';
+    el.querySelector('button').onclick=()=>{ if(!canAfford(nextCost)) return; pay(nextCost); b.count+=1; if(name==='Snuggle Hall'){ S.colonists.housing+=2; } addLog('Built '+name+'.'); recompute(); renderAll(); save(); };
+    list.appendChild(el);
+  }
+}
+function renderUpgrades(){
+  const list=document.getElementById('upgradeList'); list.innerHTML='';
+  for(const [name,u] of Object.entries(S.upgrades)){
+    const lv=u.level, tE=treeEffects();
+    const nextCost=Object.fromEntries(Object.entries(u.baseCost).map(([k,v])=>{
+  let val = Math.ceil(v*Math.pow(u.scale,lv)*(1-(tE.discount||0)));
+  if(S && S.capacity && S.capacity[k]){
+    const cap80 = Math.floor(S.capacity[k]*0.8);
+    if(val>cap80) val = cap80;
+  }
+  return [k,val];
+}));
+    const maxed=lv>=u.max;
+    const el=document.createElement('div'); el.className='build-item';
+    el.innerHTML='<div class="left"><div><div><b>'+name+'</b> <span class="count">Lv '+lv+'/'+u.max+'</span></div><div class="small">'+upgradeText(u.effect)+'</div><div class="small">Cost: '+Object.entries(nextCost).map(([k,v])=>fmt(v)+' '+icon(k)).join(' • ')+'</div></div></div><button class="btn '+(maxed?'':(canAfford(nextCost)?'good':''))+'" '+(maxed?'disabled':'')+'>Upgrade</button>';
+    el.querySelector('button').onclick=()=>{ if(maxed||!canAfford(nextCost)) return; pay(nextCost); u.level+=1; addLog('Upgraded '+name+' to Lv '+u.level+'.'); recompute(); renderAll(); save(); };
+    list.appendChild(el);
+  }
+}
+function upgradeText(e){ const parts=[]; if(e.energyMult) parts.push('+'+Math.round(e.energyMult*100)+'% ✨'); if(e.oreMult) parts.push('+'+Math.round(e.oreMult*100)+'% 💖'); if(e.foodMult) parts.push('+'+Math.round(e.foodMult*100)+'% 🍓'); if(e.capAll) parts.push('+'+Math.round(e.capAll*100)+'% capacity'); return parts.join(' • '); }
+function renderLog(){ document.getElementById('log').textContent = S.log.join('\n'); }
+function renderAll(){ recompute(); renderStats(); renderBuilds(); renderUpgrades(); renderTree(); renderLog(); }
+
+function prestigeGain(){ const tE=treeEffects(); const total=S.resources.energy+S.resources.ore+S.resources.food; const base=Math.floor(Math.sqrt(total)/50); const mult=1+(tE.inspBonus||0); return Math.floor(base*mult); }
+function tryPrestige(){ const req={energy:10000, ore:5000, food:5000}; if(!canAfford(req)){ addLog('Not enough resources to send the Love Beacon.'); return; } const gain=prestigeGain(); pay(req); const kept=S.inspiration+gain; const keep={ inspiration: kept }; S=structuredClone(defaultState); S.inspiration=keep.inspiration; addLog('Love Beacon sent! You gained +'+gain+' Heartlight (total '+S.inspiration+'). Island reset.'); save(); renderAll(); }
+
+function bind(){
+  document.getElementById('tapBtn').onclick=()=>{ const tE=treeEffects(); const tap=1+(tE.tapBonus||0); S.resources.energy=Math.min(S.capacity.energy, S.resources.energy+tap); renderAll(); };
+  document.getElementById('hireBtn').onclick=()=>{ if(S.resources.food<50) return; if(S.colonists.count>=S.colonists.housing){ addLog('Build Snuggle Halls to make room for more Michelle’s.'); return; } S.resources.food-=50; S.colonists.count+=1; addLog('A new Michelle arrived, purring softly.'); renderAll(); save(); };
+  document.getElementById('prestigeBtn').onclick=tryPrestige;
+  document.getElementById('saveBtn').onclick=()=>save(true);
+  document.getElementById('wipeBtn').onclick=()=>{ if(confirm('Wipe local save and restart?')) reset(); };
+  document.getElementById('exportBtn').onclick=()=>{ const data=btoa(unescape(encodeURIComponent(JSON.stringify(S)))); const blob=new Blob([data],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='michelles_colony_save.txt'; a.click(); };
+  const tabs=[['tabBuild','panelBuild'],['tabUpg','panelUpg'],['tabPrestige','panelPrestige'],['tabTree','panelTree'],['tabSettings','panelSettings']];
+  tabs.forEach(([tid,pid])=>{ document.getElementById(tid).onclick=()=>{ tabs.forEach(([t,p])=>{ document.getElementById(t).classList.toggle('active', t===tid); document.getElementById(p).style.display=(p===pid)?'block':'none'; }); }; });
+}
+
+let acc=0,last=performance.now();
+function loop(now){ const dt=(now-last)/1000; last=now; acc+=dt; const step=0.1; while(acc>=step){ tick(step); acc-=step; } renderStats(); requestAnimationFrame(loop); }
+
+window.addEventListener('load', ()=>{ load(); doOffline(); bind(); renderAll(); save(); requestAnimationFrame(loop); if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js'); } addLog('Welcome to Michelle’s Colony — a cozy island of cuddly joy.'); });
+</script>
+</body>
+</html>
