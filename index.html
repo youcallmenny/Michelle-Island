@@ -61,7 +61,7 @@
   <header>
     <h1>
       🌸 Michelle’s Colony
-      <span class="badge" id="badge">v1.2.9 Tap-Force</span>
+      <span class="badge" id="badge">v1.3.1-r2</span>
       <span class="badge" id="hlBadge" title="Total Heartlight">💞 <span id="hlHeader">0</span></span>
       <span class="badge" id="nickBadge" style="display:none"></span>
     </h1>
@@ -77,7 +77,7 @@
         <div class="stat"><h3>Treats 🍓</h3><div class="val" id="food">0</div><div class="small" id="fps">+0/s</div></div>
         <div class="stat"><h3>Petals 🌸</h3><div class="val" id="petals">0</div><div class="small" id="pps">+0/s</div></div>
         <div class="stat"><h3>Michelle’s 🐾</h3><div class="val" id="colonists">0 / 0</div><div class="small" id="morale">happiness: 100%</div></div>
-        <div class="stat"><h3>Heartlight 💞</h3><div class="val" id="inspirationStat">0</div><div class="small">permanent</div></div>
+        <div class="stat"><h3>Beacons of Love 💞</h3><div class="val" id="beaconsCount">0</div><div class="small">total prestiges</div></div>
       </div>
       <div style="margin-top:10px" class="grid cols-2">
         <button id="tapBtn" class="btn accent" tabindex="0" role="button" aria-label="Tap to Share Affection">Tap to Share Affection (<span id="tapPulse">0</span>)</button>
@@ -137,6 +137,7 @@
           <button class="btn" id="saveBtn">Save Now</button>
           <button class="btn bad" id="wipeBtn">Wipe Save (reset)</button>
           <button class="btn" id="installBtn2" style="display:none">Install Michelle’s Colony</button>
+          <button class="btn" id="muteBtn">Mute: Off</button>
           <div class="small" id="saveInfo"></div>
         </div>
       </div>
@@ -165,8 +166,73 @@
 </div></div>
 
 <script>
-const VERSION = '1.2.9';
+const VERSION = '1.3.1-r2';
 const SAVE_KEY = 'michelles_colony_save_v1';
+
+// --- Simple WebAudio Sound Manager (cute sounds + ambient) ---
+const Sound = (()=>{
+  let ctx, muted=false, gainMain, gainAmb, ambOsc1, ambOsc2, ambNoise, ambFilter;
+  function ensure(){
+    if(ctx) return;
+    ctx = new (window.AudioContext||window.webkitAudioContext)();
+    gainMain = ctx.createGain(); gainMain.gain.value=0.5; gainMain.connect(ctx.destination);
+    gainAmb = ctx.createGain(); gainAmb.gain.value=0.25; gainAmb.connect(ctx.destination);
+    // Ambient pad: two slow detuned sines + filtered noise "wind"
+    ambOsc1 = ctx.createOscillator(); ambOsc1.type='sine'; ambOsc1.frequency.value=220;
+    ambOsc2 = ctx.createOscillator(); ambOsc2.type='sine'; ambOsc2.frequency.value=224;
+    const ambGain1 = ctx.createGain(); ambGain1.gain.value=0.05;
+    const ambGain2 = ctx.createGain(); ambGain2.gain.value=0.05;
+    ambOsc1.connect(ambGain1).connect(gainAmb);
+    ambOsc2.connect(ambGain2).connect(gainAmb);
+    // Wind noise
+    const bufferSize = 2 * ctx.sampleRate;
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i=0;i<bufferSize;i++){ data[i] = Math.random()*2-1; }
+    ambNoise = ctx.createBufferSource(); ambNoise.buffer=noiseBuffer; ambNoise.loop=true;
+    ambFilter = ctx.createBiquadFilter(); ambFilter.type='lowpass'; ambFilter.frequency.value=800;
+    const ambNoiseGain = ctx.createGain(); ambNoiseGain.gain.value=0.02;
+    ambNoise.connect(ambFilter).connect(ambNoiseGain).connect(gainAmb);
+    // start paused; will start on first user interaction
+  }
+  function startAmbient(){ ensure(); try{ ambOsc1.start(); }catch{} try{ ambOsc2.start(); }catch{} try{ ambNoise.start(); }catch{} }
+  function stopAmbient(){ try{ ambOsc1.stop(); }catch{} try{ ambOsc2.stop(); }catch{} try{ ambNoise.stop(); }catch{} }
+  function setMuted(m){ muted=m; if(!ctx) return; gainMain.gain.value = m ? 0 : 0.5; gainAmb.gain.value  = m ? 0 : 0.25; }
+  function envTone(freq=600, time=0.12, type='sine', vol=0.5){
+    ensure();
+    const o = ctx.createOscillator(); o.type=type; o.frequency.value=freq;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, ctx.currentTime);
+    g.gain.linearRampToValueAtTime(vol, ctx.currentTime+0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+time);
+    o.connect(g).connect(gainMain); o.start(); o.stop(ctx.currentTime+time+0.02);
+  }
+  function chord(freqs=[440,554,659], time=0.6){
+    ensure();
+    const g = ctx.createGain(); g.gain.value=0.3; g.connect(gainMain);
+    freqs.forEach((f,i)=>{
+      const o=ctx.createOscillator(); o.type='sine'; o.frequency.value=f;
+      const eg=ctx.createGain(); eg.gain.setValueAtTime(0, ctx.currentTime);
+      eg.gain.linearRampToValueAtTime(0.3, ctx.currentTime+0.02);
+      eg.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+time);
+      o.connect(eg).connect(g); o.start(); o.stop(ctx.currentTime+time+0.05);
+    });
+  }
+  return {
+    tap: ()=>envTone(700,0.08,'triangle',0.35),
+    build: ()=>envTone(520,0.12,'square',0.4),
+    upgrade: ()=>{ envTone(880,0.10,'sine',0.4); setTimeout(()=>envTone(1320,0.10,'sine',0.35),60); },
+    join: ()=>envTone(1040,0.12,'triangle',0.45),
+    questStart: ()=>envTone(420,0.14,'sawtooth',0.35),
+    questReturn: ()=>chord([523,659,784],0.5),
+    prestige: ()=>{ envTone(300,0.25,'sawtooth',0.5); setTimeout(()=>chord([392,523,659],0.8),150); },
+    tree: ()=>envTone(990,0.18,'sine',0.4),
+    ambientOn: ()=>{ ensure(); startAmbient(); },
+    ambientOff: ()=>{ stopAmbient(); },
+    mute: ()=>setMuted(true),
+    unmute: ()=>setMuted(false),
+    resume: ()=>ensure()
+  };
+})();
 
 // --- Install bar (Android) ---
 let deferredPrompt = null;
@@ -187,7 +253,7 @@ document.addEventListener('click', async (ev) => {
   }
 });
 
-// -------- Game state (same as previous) --------
+// -------- Game state --------
 const defaultState = {
   tree: { levels: {} },
   resources: { energy: 0, ore: 0, food: 0, petals: 0 },
@@ -208,9 +274,14 @@ const defaultState = {
     'Adventure Spark':       { level:0, max:5, baseCost:{ energy:80 },scale:1.8, effect:{ oreMult:    0.25 } },
     'Favorite Snacks':       { level:0, max:5, baseCost:{ ore:60 },   scale:1.8, effect:{ foodMult:   0.25 } },
     'Cozy Logistics':        { level:0, max:5, baseCost:{ ore:100 },  scale:2.0, effect:{ capAll:     0.25 } },
-    'Evening Walks (T2)':    { level:0, max:5, baseCost:{ food:150 }, scale:2.0, effect:{ moraleFloor: 0.02 } },
-    'Tap Mastery (T2)':      { level:0, max:5, baseCost:{ ore:200 },  scale:2.1, effect:{ tapMult:    0.50 } },
-    'Petal Care (T2)':       { level:0, max:5, baseCost:{ petals:120 },scale:2.0, effect:{ petalsMult: 0.30 } }
+    // Tier 2
+    'Evening Walks (T2)':    { level:0, max:5, baseCost:{ food:150 },   scale:2.0, effect:{ moraleFloor: 0.02 } },
+    'Tap Mastery (T2)':      { level:0, max:5, baseCost:{ ore:200 },    scale:2.1, effect:{ tapMult:    0.50 } },
+    'Petal Care (T2)':       { level:0, max:5, baseCost:{ petals:120 }, scale:2.0, effect:{ petalsMult: 0.30 } },
+    // Tier 3 (locked until all T2 are maxed)
+    'Twilight Harmony (T3)': { level:0, max:5, baseCost:{ ore:500, food:400 }, scale:2.2, effect:{ energyMult:0.40, oreMult:0.35 } },
+    'Everwarm Pantry (T3)':  { level:0, max:5, baseCost:{ food:600, petals:300 }, scale:2.2, effect:{ foodMult:0.45, moraleFloor:0.03 } },
+    'Starlit Vaults (T3)':   { level:0, max:5, baseCost:{ ore:700 }, scale:2.3, effect:{ capAll:0.35 } }
   },
   colonists: { count: 0, morale: 1.0, housing: 0 },
   inspiration: 0,
@@ -220,7 +291,8 @@ const defaultState = {
   lastTick: Date.now(),
   offlineNote: '',
   log: [],
-  won: false
+  won: false,
+  muted: false
 };
 
 const TREE_DEFS = {
@@ -302,6 +374,7 @@ function load(){
   else{ S=deepClone(defaultState); }
   S = Object.assign(deepClone(defaultState), S);
   healSchema();
+  if(S.muted){ Sound.mute(); document.getElementById('muteBtn').textContent='Mute: On'; }
 }
 function reset(){
   localStorage.removeItem(SAVE_KEY);
@@ -423,11 +496,11 @@ function renderStats(){
   document.getElementById('storeText').textContent = fmt(S.resources.ore)+' / '+fmt(S.capacity.ore);
   document.getElementById('siloText').textContent = fmt(S.resources.food)+' / '+fmt(S.capacity.food);
   document.getElementById('petalText').textContent = fmt(S.resources.petals)+' / '+fmt(S.capacity.petals);
+  document.getElementById('hlHeader').textContent=fmt(S.inspiration);
+  document.getElementById('beaconsCount').textContent = (S.prestigeCount||0).toString();
   const preview=prestigeGain(); document.getElementById('prestigeGain').textContent=fmt(preview);
   document.getElementById('inspiration').textContent=fmt(S.inspiration);
   document.getElementById('inspBoost').textContent=(S.inspiration*2).toFixed(0);
-  document.getElementById('inspirationStat').textContent=fmt(S.inspiration);
-  document.getElementById('hlHeader').textContent=fmt(S.inspiration);
   const req = prestigeReq();
   document.getElementById('reqEnergy').textContent = fmt(req.energy);
   document.getElementById('reqOre').textContent = fmt(req.ore);
@@ -446,19 +519,23 @@ function renderBuilds(){
     const btn = el.querySelector('button');
     const refreshBtn = ()=>{ const nc = costFor(b.baseCost, b.costScale, b.count); btn.className='btn '+(canAfford(nc)?'good':''); };
     refreshBtn();
-    btn.onclick=()=>{ const nc = costFor(b.baseCost, b.costScale, b.count); if(!canAfford(nc)) return; pay(nc); b.count+=1; if(name==='Snuggle Hall'){ S.colonists.housing+=2; } addLog('Built '+name+'.'); recompute(); renderStats(); refreshBtn(); save(); };
+    btn.onclick=()=>{ const nc = costFor(b.baseCost, b.costScale, b.count); if(!canAfford(nc)) return; pay(nc); b.count+=1; if(name==='Snuggle Hall'){ S.colonists.housing+=2; } addLog('Built '+name+'.'); Sound.build(); recompute(); renderStats(); refreshBtn(); save(); };
     el.dataset.refresh='1';
     list.appendChild(el);
   });
 }
 function upgradeText(e){ const parts=[]; if(e.energyMult) parts.push('+'+Math.round(e.energyMult*100)+'% ✨'); if(e.oreMult) parts.push('+'+Math.round(e.oreMult*100)+'% 💖'); if(e.foodMult) parts.push('+'+Math.round(e.foodMult*100)+'% 🍓'); if(e.petalsMult) parts.push('+'+Math.round(e.petalsMult*100)+'% 🌸'); if(e.capAll) parts.push('+'+Math.round(e.capAll*100)+'% capacity'); if(e.tapMult) parts.push('+'+Math.round(e.tapMult*100)+'% tap'); if(e.moraleFloor) parts.push('+'+Math.round(e.moraleFloor*100)+'% happiness floor'); return parts.join(' • '); }
-function tier1Maxed(){ let ok=true; for(const [name,u] of Object.entries(S.upgrades)){ if(name.includes('(T2)')) continue; if(u.level < u.max){ ok=false; break; } } return ok; }
+function tier1Maxed(){ let ok=true; for(const [name,u] of Object.entries(S.upgrades)){ if(name.includes('(T2)') || name.includes('(T3)')) continue; if(u.level < u.max){ ok=false; break; } } return ok; }
+function tier2Maxed(){ let ok=true; for(const [name,u] of Object.entries(S.upgrades)){ if(!name.includes('(T2)')) continue; if(u.level < u.max){ ok=false; break; } } return ok; }
 function renderUpgrades(){
   const list=document.getElementById('upgradeList'); list.innerHTML='';
   const showT2 = tier1Maxed();
+  const showT3 = tier2Maxed();
   for(const [name,u] of Object.entries(S.upgrades)){
     const isT2 = name.includes('(T2)');
+    const isT3 = name.includes('(T3)');
     if(isT2 && !showT2) continue;
+    if(isT3 && !showT3) continue;
     const lv=u.level, tE=treeEffects();
     const costObj=Object.fromEntries(Object.entries(u.baseCost).map(([k,v])=>{
       let val = Math.ceil(v*Math.pow(u.scale,lv)*(1-(tE.discount||0)));
@@ -497,7 +574,7 @@ function renderUpgrades(){
         return [k,val];
       }));
       if(!canAfford(nowCost)) return;
-      pay(nowCost); u.level+=1; addLog('Upgraded '+name+' to Lv '+u.level+'.'); recompute(); renderStats(); refreshBtn(); save(); renderUpgrades();
+      pay(nowCost); u.level+=1; addLog('Upgraded '+name+' to Lv '+u.level+'.'); Sound.upgrade(); recompute(); renderStats(); refreshBtn(); save(); renderUpgrades();
     };
     el.dataset.refresh='1';
     list.appendChild(el);
@@ -511,14 +588,14 @@ function renderTree(){
     const prereq = def.prereq ? ('Requires: '+def.prereq) : 'No prerequisite';
     const el = document.createElement('div'); el.className='build-item';
     el.innerHTML = '<div class="left"><div><div><b>'+name+'</b> <span class="count">Lv '+lv+'/'+def.max+'</span></div><div class="small">'+def.desc+'</div><div class="small">'+prereq+'</div><div class="small">Cost: '+cost+' 💞 Heartlight</div></div></div><button class="btn '+((!maxed && S.inspiration>=cost)?'good':'')+'" '+(maxed?'disabled':'')+'>Buy</button>';
-    el.querySelector('button').onclick=()=>buyNode(name);
+    el.querySelector('button').onclick=()=>{ buyNode(name); Sound.tree(); };
     list.appendChild(el);
   });
 }
-function renderLog(){ document.getElementById('log').textContent = S.log.join('\\n'); }
+function renderLog(){ document.getElementById('log').textContent = S.log.join('\n'); }
 function renderAll(){ recompute(); renderStats(); renderBuilds(); renderUpgrades(); renderTree(); renderLog(); checkWinCondition(); }
 
-// -------- TAP-FORCE: No-debounce, multi-event, direct state update --------
+// ---- TAP handler (reliable) ----
 function bindTap(){
   const tapBtn = document.getElementById('tapBtn');
   const tapPulse = document.getElementById('tapPulse');
@@ -527,6 +604,7 @@ function bindTap(){
   function doTap(e){
     if(e && typeof e.preventDefault === 'function') e.preventDefault();
     if(S.won) return;
+    Sound.resume(); Sound.tap();
     const mult = totalMult();
     const gain = (1 + mult.tapAdd) * (mult.tapMult);
     S.resources.energy = Math.min(S.capacity.energy, S.resources.energy + gain);
@@ -587,6 +665,7 @@ function scheduleNextQuest(announce){
     const starts=["Michelle sets out on a quest, pockets full of hope 💖","A Michelle heads out, whispering a promise to return soon 🌬️","With a bright glance back, Michelle leaves to seek love and shiny things ✨","Our brave Michelle steps off the path, heart pointing toward Gregory 💗","Michelle laces her boots and goes questing for charm and answers 🥾"];
     const line = starts[Math.floor(Math.random()*starts.length)];
     addLog(line);
+    Sound.questStart();
     showBubble(line);
   }
 }
@@ -610,8 +689,9 @@ function maybeQuest(){
     const returns=["Michelle returns from her quest, cheeks rosy and arms full of wonder 🎒","She’s back from the path, carrying treasures and a story to tell ✨","Michelle comes home smiling—love and luck clinging to her coat 💞","Boots dusty, heart bright—Michelle returns from the quest 🥾💖","Michelle returns, whispering, 'I always find my way back to you.'"];
     const ret = returns[Math.floor(Math.random()*returns.length)];
     addLog(ret + ' +' + fmt(e)+'✨ +' + fmt(o)+'💖 +' + fmt(f)+'🍓 +' + fmt(p)+'🌸');
+    Sound.questReturn();
     showBubble(ret);
-    S.questActive = false
+    S.questActive = false;
     scheduleNextQuest(true);
     save();
   }
@@ -631,16 +711,12 @@ function switchPanel(showId){
   tabs.forEach((id,i)=>{ const el=document.getElementById(id); el.classList.toggle('active', panels[i]===showId); });
 }
 
-function renderAll(){ recompute(); renderStats(); renderBuilds(); renderUpgrades(); renderTree(); renderLog(); checkWinCondition(); }
-
-function renderLog(){ document.getElementById('log').textContent = S.log.join('\\n'); }
-
 // Prestige & Win
 function prestigeReq(){
   const scale = Math.pow(1.25, (S.prestigeCount||0));
   return { energy: Math.floor(10000 * scale), ore: Math.floor(5000 * scale), food: Math.floor(5000 * scale), petals: Math.floor(3000 * scale) };
 }
-function prestigeGain(){ const tE=treeEffects(); const total=S.resources.energy+S.resources.ore+S.resources.food+S.resources.petals; const base=Math.floor(Math.sqrt(total)/45); const mult=1+(tE.inspBonus||0); return Math.floor(base*mult); }
+function prestigeGain(){ const tE=treeEffects(); const total=S.resources.energy+S.resources.ore+S.resources.food+S.resources.petals; const base=Math.floor(Math.sqrt(total)/18); const mult=1+(tE.inspBonus||0); return Math.floor(base*mult); } // 2.5x faster
 function tryPrestige(){
   if(S.won) return;
   const req=prestigeReq();
@@ -655,7 +731,8 @@ function tryPrestige(){
   S.inspiration = keptInsp;
   S.prestigeCount = nextCount;
   scheduleNextQuest(true);
-  addLog('Love Beacon sent! +'+gain+' Heartlight (total '+S.inspiration+'). Requirements increased for next time.');
+  addLog('Love Beacon sent! +'+gain+' Heartlight (total '+S.inspiration+'). Beacons of Love: '+S.prestigeCount);
+  Sound.prestige();
   save(); renderAll();
 }
 function nodeCost(name){ const def = TREE_DEFS[name], lv = (S.tree.levels[name]||0); return Math.ceil(def.baseCost * Math.pow(def.scale, lv)); }
@@ -666,6 +743,7 @@ function buyNode(name){
   S.inspiration -= cost;
   S.tree.levels[name] = (S.tree.levels[name]||0) + 1;
   addLog('Prestige node purchased: '+name+' (Lv '+S.tree.levels[name]+').');
+  Sound.tree();
   recompute(); renderAll(); save();
 }
 function allTreeMaxed(){ for(const k in TREE_DEFS){ const d=TREE_DEFS[k]; const lv=(S.tree.levels[k]||0); if(lv<d.max) return false; } return true; }
@@ -712,9 +790,17 @@ function bindUI(){
     const cost = { food: 50 };
     if(S.colonists.count >= S.colonists.housing){ addLog('No housing! Build more Snuggle Halls.'); return; }
     if(!canAfford(cost)){ addLog('Not enough 🍓 Treats to invite.'); return; }
-    pay(cost); S.colonists.count += 1; addLog('A new Michelle joined the island! 🐾'); recompute(); renderStats(); save();
+    pay(cost); S.colonists.count += 1; addLog('A new Michelle joined the island! 🐾'); Sound.join(); recompute(); renderStats(); save();
   };
-  document.getElementById('restartBtn').onclick = ()=>{ if(confirm('Start a brand new journey?')){ reset(); document.getElementById('ending').style.display='none'; } };
+  document.getElementById('muteBtn').onclick = ()=>{
+    S.muted = !S.muted;
+    if(S.muted){ Sound.mute(); document.getElementById('muteBtn').textContent='Mute: On'; }
+    else { Sound.unmute(); document.getElementById('muteBtn').textContent='Mute: Off'; }
+    save();
+  };
+  // Start ambient after first user interaction (policy-safe)
+  const startAmbOnce = ()=>{ Sound.ambientOn(); window.removeEventListener('pointerdown', startAmbOnce); };
+  window.addEventListener('pointerdown', startAmbOnce, {once:true});
   bindTap();
 }
 function loadAndStart(){
